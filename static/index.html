@@ -1,0 +1,1482 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>笔记管家</title>
+<style>
+  :root {
+    --bg: #fafafa;
+    --card: #ffffff;
+    --border: #e6e6e6;
+    --border-strong: #cccccc;
+    --text: #111111;
+    --muted: #555555;
+    --faint: #999999;
+    --accent: #0e7c66;
+    --accent-deep: #0b6a57;
+    --accent-weak: #eef5f2;
+    --danger: #b3261e;
+    --danger-weak: #fdecec;
+    --ok: #1a7f37;
+    --ok-weak: #e6f4ea;
+    --warn: #8a4b0a;
+    --warn-weak: #fef3c7;
+    --shadow: none;
+    --shadow-lg: none;
+    --radius: 0px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--text);
+    font-size: 14px; line-height: 1.6; height: 100vh; overflow: hidden;
+  }
+  button { font: inherit; border: none; cursor: pointer; color: inherit; }
+  input, textarea, select { font: inherit; }
+
+  /* ---------- 顶栏 ---------- */
+  .topbar {
+    height: 56px; background: var(--card); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 20px; gap: 14px; z-index: 20; position: relative;
+  }
+  .brand { font-size: 18px; font-weight: 700; letter-spacing: .5px; display: flex; align-items: center; gap: 9px; }
+  .brand .logo { width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; }
+  .brand .logo svg { width: 26px; height: 26px; display: block; }
+  .brand b { color: var(--accent); font-weight: 700; }
+  .top-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .status { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 13px;
+            background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px var(--ok-weak); }
+  .ghost-btn { background: transparent; color: var(--text); border: 1px solid var(--border-strong);
+               border-radius: 10px; padding: 7px 14px; font-size: 13px; font-weight: 500;
+               transition: all .15s; display: inline-flex; align-items: center; gap: 6px; }
+  .ghost-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-weak); }
+
+  /* ---------- 主区：V2 笔记前置（grid 3fr 笔记库左置 / 2fr 对话右置） ---------- */
+  .main { display: grid; grid-template-columns: 3fr 2fr; grid-template-rows: 1fr;
+          height: calc(100vh - 56px); overflow: hidden; }
+
+  /* 右：对话工作台 */
+  .chat-col { min-width: 0; min-height: 0; display: flex; flex-direction: column; padding: 16px 18px; gap: 12px;
+              border-left: 1px solid var(--border); }
+  .dropzone { border: 1px solid var(--border-strong);
+              padding: 14px; text-align: center; color: var(--muted); cursor: pointer; font-size: 13px;
+              background: var(--card); transition: all .15s; flex: 0 0 auto; }
+  .dropzone:hover, .dropzone.over { border-color: var(--accent); background: var(--accent-weak); color: var(--accent); }
+  .dropzone b { color: var(--accent); }
+  .pending-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 12px;
+                 background: var(--accent-weak); border: 1px solid #cdeee7; border-radius: 10px; flex: 0 0 auto; }
+  .pending-bar .p-label { font-size: 12px; font-weight: 600; color: var(--accent); }
+  .pending-bar .p-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px;
+                         background: #fff; border: 1px solid var(--border); border-radius: 999px;
+                         padding: 2px 8px; color: var(--text); }
+  .pending-bar .p-x { cursor: pointer; color: var(--muted); font-weight: 700; }
+  .pending-bar .p-x:hover { color: var(--danger); }
+  .pending-bar .p-hint { font-size: 11.5px; color: var(--muted); width: 100%; }
+  .chat-card { flex: 1; min-height: 0; background: var(--card); border: 1px solid var(--border);
+               border-radius: var(--radius); box-shadow: var(--shadow); display: flex; flex-direction: column; overflow: hidden; }
+  #messages { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .chat-toolbar { display: flex; align-items: center; justify-content: space-between;
+                  padding: 8px 14px 0; }
+  .chat-label { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .5px; }
+  #clearChatBtn { font-size: 12px; padding: 4px 10px; border-radius: 8px; }
+  .msg { max-width: 88%; padding: 10px 14px; border-radius: 12px; word-break: break-word; }
+  .msg.user { align-self: flex-end; background: #111111; color: #fff; }
+  .msg.agent { align-self: flex-start; background: var(--bg); border: 1px solid var(--border);
+               box-shadow: 0 1px 2px rgba(16,24,40,.03); }
+  .msg.err { align-self: flex-start; background: var(--danger-weak); color: var(--danger); }
+  .msg.loading { display: flex; align-items: center; gap: 9px; color: var(--muted);
+                 background: var(--bg); border: 1px dashed var(--border-strong); }
+  .spinner { width: 15px; height: 15px; flex: 0 0 auto; border: 2px solid var(--accent-weak);
+             border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .load-msg { font-size: 13px; }
+  .inputrow { display: flex; gap: 10px; padding: 12px 14px; border-top: 1px solid var(--border); }
+  #chatInput { flex: 1; border: 1px solid var(--border-strong); border-radius: 10px; padding: 10px 12px;
+               font-size: 14px; outline: none; transition: border-color .15s; }
+  #chatInput:focus { border-color: var(--accent); }
+  #sendBtn { background: var(--accent); color: #fff; border-radius: 10px; padding: 0 20px;
+             font-weight: 600; transition: all .15s; }
+  #sendBtn:hover { background: var(--accent-deep); }
+  #sendBtn:disabled { opacity: .5; cursor: default; }
+
+  /* 左：笔记库（grid 第一列 3fr 主导） */
+  .notes-col { min-width: 0; min-height: 0; background: var(--card); display: flex; flex-direction: column; }
+  .notes-head { padding: 14px 16px 10px; border-bottom: 1px solid var(--border); }
+  .notes-title { font-size: 15px; font-weight: 700; display: flex; align-items: center; justify-content: space-between; }
+  .notes-title .count { font-size: 12px; font-weight: 400; color: var(--faint); }
+  #searchInput { width: 100%; border: 1px solid var(--border-strong); border-radius: 10px;
+                 padding: 8px 11px; font-size: 13px; margin-top: 10px; outline: none; transition: border-color .15s; }
+  #searchInput:focus { border-color: var(--accent); }
+  .filters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; }
+  .filters select { font-size: 12px; padding: 4px 7px; border: 1px solid var(--border-strong);
+                    border-radius: 8px; background: #fff; color: var(--text); cursor: pointer; }
+  #tagChips { display: flex; flex-wrap: nowrap; gap: 6px; overflow-x: auto; flex: 0 0 100%;
+              padding: 2px 0 4px; }
+  .chip { font-size: 11.5px; padding: 3px 9px; border: 1px solid var(--border); border-radius: 999px;
+          cursor: pointer; color: var(--muted); background: #fff; transition: all .15s;
+          white-space: nowrap; flex: 0 0 auto; }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+  .chip.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  #clearFilter { font-size: 12px; padding: 3px 8px; border: 1px solid var(--border);
+                 border-radius: 8px; background: #fff; color: var(--text); cursor: pointer; }
+  #clearFilter:hover { border-color: var(--accent); color: var(--accent); }
+  .notes-body { flex: 1; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .panel { display: flex; flex-direction: column; gap: 8px; }
+  .empty { color: var(--faint); font-size: 13px; padding: 14px 4px; text-align: center; }
+  .note-item { border-bottom: 1px solid var(--border); padding: 12px 14px; cursor: pointer;
+               background: #fff; transition: all .15s; position: relative; }
+  .note-item:hover { background: var(--accent-weak); }
+  .note-item-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .note-title { font-weight: 600; font-size: 14px; word-break: break-word; }
+  .del-note { font-size: 11px; color: var(--faint); cursor: pointer; padding: 2px 6px;
+              visibility: hidden; flex-shrink: 0; }
+  .note-item:hover .del-note { visibility: visible; }
+  .del-note:hover { color: #c0392b; text-decoration: underline; }
+  .note-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 5px; font-size: 11px; color: var(--faint); }
+  .badge { font-size: 10.5px; padding: 1px 8px; border-radius: 999px; font-weight: 600; }
+  .badge.type { background: var(--accent-weak); color: var(--accent); }
+  .badge.st-done { background: var(--ok-weak); color: var(--ok); }
+  .badge.st-draft { background: var(--warn-weak); color: var(--warn); }
+  .badge.st-none { background: #eef0f3; color: var(--muted); }
+  .note-meta .tg { color: var(--faint); }
+  .note-date { color: var(--faint); margin-left: auto; font-variant-numeric: tabular-nums; }
+  .hit { border: 1px solid var(--border); border-radius: 10px; padding: 7px 11px; cursor: pointer;
+         font-size: 12.5px; background: #fff; transition: all .15s; }
+  .hit:hover { border-color: var(--accent); }
+  .hit .hf { color: var(--accent); font-weight: 600; }
+  .hit .hs { color: var(--muted); font-size: 12px; }
+  .hit .ht { font-weight: 700; font-size: 13px; margin-bottom: 2px; }
+  .hit .hc { color: var(--faint); font-size: 11.5px; }
+  .hit mark { background: var(--accent-weak); color: var(--accent-deep); padding: 0 1px; }
+  .history-panel { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px; }
+  .hist-head { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .hist-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px dashed var(--border); }
+  .hist-ts { color: var(--faint); font-size: 11px; margin-right: auto; }
+  .hist-act { font-size: 11px; padding: 2px 8px; background: var(--accent-weak); color: var(--accent-deep); border: 1px solid var(--accent); cursor: pointer; }
+  .hist-act.danger { background: #fdf1f0; color: var(--danger); border-color: var(--danger); }
+  .hist-preview { margin-top: 8px; padding: 8px; border: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+
+  /* ---------- 弹层 ---------- */
+  .modal { display: none; position: fixed; inset: 0; background: rgba(15,23,42,.42);
+           align-items: center; justify-content: center; z-index: 50; padding: 20px; }
+  .modal.show { display: flex; }
+  .modal-card { background: #fff; border-radius: 14px; width: min(680px, 100%);
+                max-height: 84vh; display: flex; flex-direction: column; overflow: hidden;
+                box-shadow: var(--shadow-lg); }
+  .modal.drawer { align-items: stretch; justify-content: flex-end; padding: 0; }
+  .modal.drawer .modal-card { width: min(880px, 96vw); height: 100vh; max-height: 100vh;
+                              border-radius: 0; box-shadow: -10px 0 34px rgba(16,24,40,.22); }
+  .modal.drawer.show .modal-card { animation: drawerIn .24s ease; }
+  @keyframes drawerIn { from { transform: translateX(80px); opacity: .3; }
+                        to { transform: none; opacity: 1; } }
+  .modal-head { display: flex; align-items: center; justify-content: space-between;
+                padding: 14px 20px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 15px; }
+  .modal-head button { background: transparent; color: var(--muted); font-size: 22px; line-height: 1; }
+  .modal-head button:hover { color: var(--text); }
+  .modal-open { padding: 10px 20px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; }
+  .modal-open button { background: var(--accent-weak); color: var(--accent); font-size: 13px;
+                       padding: 6px 14px; border-radius: 8px; font-weight: 600; }
+  .modal-open button:hover { background: #d8f1ec; }
+  #modalBody { padding: 18px 22px; overflow-y: auto; word-break: break-word; font-size: 14px; flex: 1; line-height: 1.75; }
+  .modal-links { padding: 12px 20px; border-top: 1px solid var(--border); display: flex;
+                 flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12.5px; }
+  .modal-links .links-title { color: var(--muted); font-weight: 600; }
+  .modal-links a.wl { color: var(--accent); text-decoration: none; border: 1px solid var(--border);
+                      border-radius: 999px; padding: 2px 9px; font-size: 12px; }
+  .modal-links a.wl:hover { background: var(--accent-weak); border-color: var(--accent); }
+
+  /* ---------- 统一确认弹窗（瑞士网格直角） ---------- */
+  .cf { position: fixed; inset: 0; background: rgba(15,23,42,.42);
+        display: flex; align-items: center; justify-content: center; z-index: 3000;
+        animation: cfIn .16s ease; }
+  .cf-box { background: #fff; border: 1px solid var(--border); border-radius: 0;
+            width: min(440px, calc(100vw - 32px)); padding: 22px 24px 18px;
+            box-shadow: 0 20px 50px rgba(0,0,0,.18); }
+  .cf-title { font-size: 15px; font-weight: 700; letter-spacing: .02em; display: flex;
+              align-items: center; gap: 8px; }
+  .cf-title::before { content: ""; width: 4px; height: 15px; background: var(--accent); }
+  .cf-msg { font-size: 13.5px; color: var(--muted); line-height: 1.65; margin-top: 12px;
+            word-break: break-word; }
+  .cf-btns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+  .cf-btn { border: 1px solid var(--border); background: #fff; color: var(--text);
+            font-size: 13px; padding: 8px 18px; border-radius: 0; cursor: pointer;
+            transition: all .15s; }
+  .cf-btn:hover { background: #f2f3f4; }
+  .cf-btn.primary { background: #111; border-color: #111; color: #fff; }
+  .cf-btn.primary:hover { background: #000; }
+  .cf-btn.danger { background: #c0392b; border-color: #c0392b; color: #fff; }
+  .cf-btn.danger:hover { background: #a93226; }
+  @keyframes cfIn { from { opacity: 0 } to { opacity: 1 } }
+
+  /* ---------- Markdown 渲染 ---------- */
+  .md pre, .md code { font-family: ui-monospace, Consolas, "Courier New", monospace; }
+  .md pre { background: #f3f5f7; border: 1px solid #e4e8ec; border-radius: 10px; padding: 11px 13px;
+            overflow-x: auto; font-size: 12.5px; line-height: 1.6; }
+  .md code { background: #f0f2f4; border-radius: 4px; padding: 1px 5px; font-size: 12px; }
+  .md pre code { background: none; padding: 0; }
+  .md h1, .md h2, .md h3 { margin: 16px 0 7px; line-height: 1.4; font-weight: 700; }
+  .md h1 { font-size: 20px; } .md h2 { font-size: 17px; } .md h3 { font-size: 15px; }
+  .md h1:first-child, .md h2:first-child { margin-top: 0; }
+  .md ul, .md ol { margin: 7px 0; padding-left: 24px; }
+  .md li { margin: 3px 0; }
+  .md p { margin: 8px 0; }
+  .md table { border-collapse: collapse; margin: 10px 0; width: 100%; font-size: 13px; }
+  .md th, .md td { border: 1px solid var(--border); padding: 7px 11px; text-align: left; }
+  .md th { background: #f6f8fa; font-weight: 600; }
+  .md tr:nth-child(even) td { background: #fafbfc; }
+  .md blockquote { margin: 9px 0; padding: 6px 14px; border-left: 3px solid var(--accent);
+                   color: #475569; background: var(--accent-weak); border-radius: 0 8px 8px 0; }
+  .md hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+  .md img { max-width: 100%; height: auto; border: 1px solid var(--border); border-radius: 10px; margin: 8px 0; }
+  .msg.agent { line-height: 1.7; }
+  .msg.agent pre { margin: 7px 0; }
+  .md a.wl { color: var(--accent); text-decoration: none; border-bottom: 1px dashed var(--accent); }
+  .md a.wl:hover { background: var(--accent-weak); }
+
+  /* ---------- 笔记成品卡片 ---------- */
+  .note-product { border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+                  background: #fff; box-shadow: var(--shadow); margin: 2px 0; }
+  .note-product .np-head { display: flex; align-items: center; gap: 8px; padding: 11px 14px;
+                          background: var(--accent); color: #fff; }
+  .note-product .np-title { font-weight: 600; font-size: 13.5px; flex: 1; min-width: 0; }
+  .note-product .np-badge { font-size: 11px; background: rgba(255,255,255,.22); padding: 1px 9px; border-radius: 999px; }
+  .note-product .np-body { padding: 11px 14px; font-size: 12.5px; color: var(--muted); max-height: 74px;
+                           overflow: hidden; position: relative; line-height: 1.6; }
+  .note-product .np-body::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 26px;
+                                  background: linear-gradient(transparent, #fff); }
+  .note-product .np-foot { padding: 9px 14px; border-top: 1px solid var(--border);
+                           display: flex; justify-content: space-between; align-items: center; }
+  .note-product .np-foot .np-hint { font-size: 12px; color: var(--muted); }
+  .note-product .np-foot button { font-size: 12px; padding: 5px 15px; border-radius: 8px;
+                                  background: var(--accent-weak); color: var(--accent); font-weight: 600; }
+  .note-product .np-foot button:hover { background: #d8f1ec; }
+
+  /* ---------- 分析卡片 ---------- */
+  .analysis-card { border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+                   background: #fff; box-shadow: var(--shadow); margin: 2px 0; }
+  .analysis-card .ac-head { padding: 11px 14px; background: var(--accent);
+                            color: #fff; font-weight: 600; font-size: 13.5px; }
+  .analysis-card .ac-body { padding: 12px 14px; }
+  .analysis-card .ac-summary { background: var(--accent-weak); border-left: 3px solid var(--accent);
+                               border-radius: 8px; padding: 9px 12px; margin-bottom: 10px; }
+  .analysis-card .ac-summary .lab { font-size: 11px; color: var(--accent); font-weight: 700;
+                                    letter-spacing: .5px; display: block; margin-bottom: 3px; }
+  .analysis-card .ac-summary .txt { font-size: 14px; color: var(--text); font-weight: 600; line-height: 1.5; }
+  .analysis-card details { margin-top: 8px; border: 1px solid var(--border); border-radius: 8px; }
+  .analysis-card details summary { cursor: pointer; padding: 8px 12px; font-size: 12.5px;
+                                   font-weight: 600; color: var(--muted); user-select: none; }
+  .analysis-card details summary:hover { color: var(--accent); }
+  .analysis-card details[open] summary { border-bottom: 1px solid var(--border); }
+  .analysis-card details .d-body { padding: 8px 12px; }
+  .analysis-card table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  .analysis-card th, .analysis-card td { border: 1px solid var(--border); padding: 5px 8px; text-align: left; }
+  .analysis-card th { background: #f6f8fa; font-weight: 600; }
+  .analysis-card ul { margin: 0; padding-left: 18px; }
+  .analysis-card li { margin: 3px 0; font-size: 12.5px; }
+  .analysis-card .ac-foot { padding: 9px 14px; border-top: 1px solid var(--border);
+                            display: flex; justify-content: space-between; align-items: center; }
+  .analysis-card .ac-foot .ac-left { display: flex; gap: 8px; }
+  .analysis-card .ac-foot button { font-size: 12px; padding: 5px 15px; border-radius: 8px;
+                                   background: var(--accent-weak); color: var(--accent); font-weight: 600; }
+  .analysis-card .ac-foot button:hover { background: #d8f1ec; }
+
+  /* ---------- 标签聚合页 ---------- */
+  .modal-card.tagpage { width: min(760px, 100%); }
+  .tagpage-head { display: flex; align-items: center; gap: 10px; padding: 14px 18px;
+                  border-bottom: 1px solid var(--border); font-weight: 700; font-size: 15px; }
+  .tagpage-list { padding: 14px 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+  .tagpage-item { border-bottom: 1px solid var(--border); padding: 9px 13px; cursor: pointer;
+                  font-size: 13px; background: #fff; transition: all .15s; }
+  .tagpage-item:hover { background: var(--accent-weak); }
+  .tagpage-item .t-type { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+
+  /* ---------- 偏好与记忆管理 ---------- */
+  .mem-card { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; background: #fff; }
+  .mem-card .mem-name { font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .mem-card .mem-body { color: var(--muted); font-size: 12.5px; margin-top: 6px; white-space: pre-wrap;
+                        max-height: 120px; overflow-y: auto; line-height: 1.6; }
+  .mem-card .mem-actions { margin-top: 10px; display: flex; gap: 8px; }
+  .mem-card .mem-actions button { font-size: 12px; padding: 5px 13px; border-radius: 8px;
+                                  background: var(--accent-weak); color: var(--accent); font-weight: 600; }
+  .mem-card .mem-actions button.del { background: var(--danger-weak); color: var(--danger); }
+  .mem-edit { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .mem-edit input, .mem-edit textarea { border: 1px solid var(--border-strong); border-radius: 8px;
+                                        padding: 8px 10px; font-size: 13px; outline: none; width: 100%; }
+  .mem-edit textarea { min-height: 120px; resize: vertical; }
+  .mem-edit input:focus, .mem-edit textarea:focus { border-color: var(--accent); }
+  .mem-edit .row { display: flex; gap: 8px; }
+  .mem-edit .row button { flex: 1; padding: 7px; border-radius: 8px; font-weight: 600; font-size: 13px; }
+  .mem-edit .row .save { background: var(--accent); color: #fff; }
+  .mem-edit .row .cancel { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+  #memList { overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 16px 20px; }
+  #addMemBtn { margin: 14px 20px; padding: 9px; border-radius: 10px; background: var(--accent); color: #fff;
+               font-weight: 600; font-size: 13.5px; }
+  #addMemBtn:hover { background: var(--accent-deep); }
+  .modal-card.memory { width: min(560px, 100%); }
+
+  /* ---------- 定时任务：任务卡片 ---------- */
+  .sched-grid { padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+  .sched-card { border: 1px solid var(--border); border-left: 3px solid var(--accent); padding: 14px 16px; transition: border-color .15s; }
+  .sched-card:hover { border-color: var(--accent); }
+  .sched-top { display: flex; align-items: center; gap: 10px; }
+  .sched-tag { font-size: 11px; padding: 2px 7px; letter-spacing: .03em; }
+  .sched-tag.once { background: var(--accent); color: #fff; }
+  .sched-tag.repeat { background: #f0f0f0; color: #555; }
+  .sched-ttl { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sched-del { font-size: 12px; color: var(--muted); cursor: pointer; padding: 2px 4px; }
+  .sched-del:hover { color: var(--danger); }
+  .sched-when { font-size: 15px; font-weight: 700; color: var(--accent); margin-top: 9px; }
+  .sched-desc { font-size: 12px; color: #666; line-height: 1.55; margin-top: 5px; word-break: break-word; }
+  .sched-run { font-size: 11px; margin-top: 9px; padding: 7px 10px; line-height: 1.5; word-break: break-word; border-left: 3px solid; }
+  .sched-run.ok { border-color: var(--accent); background: #f2faf7; color: #14604a; }
+  .sched-run.err { border-color: #d33; background: #fdf3f3; color: #a32727; }
+  .sched-run.running { border-color: #c7a600; background: #fdf9e9; color: #8a6d00; }
+  .sched-rerun { font-size: 11px; color: var(--accent); cursor: pointer; text-decoration: underline; margin-left: 8px; }
+  .sched-empty { padding: 28px 20px; font-size: 13px; color: var(--muted); border-bottom: 1px solid var(--border); }
+  .sched-add { padding: 16px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; background: var(--bg); }
+  .sched-add input { flex: 1; min-width: 0; border: 1px solid var(--border-strong); background: var(--card); padding: 8px 10px; font-size: 13px; outline: none; }
+  .sched-add input:focus { border-color: var(--accent); }
+  .sched-add button { border: 1px solid var(--accent); background: var(--accent); color: #fff; padding: 8px 14px; font-size: 13px; }
+  .sched-add button:hover { background: var(--accent-deep); }
+
+  @media (max-width: 900px) {
+    .main { display: flex; flex-direction: column-reverse; overflow-y: auto; }
+    .notes-col { width: 100%; border-left: none; border-top: 1px solid var(--border); max-height: 46vh; }
+    .chat-col { border-left: none; min-height: 50vh; }
+  }
+  ::-webkit-scrollbar { width: 7px; height: 7px; }
+  ::-webkit-scrollbar-thumb { background: #d4d9de; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #bcc3ca; }
+  /* 瑞士网格：全直角、无圆角，仅保留 spinner 圆形 */
+  * { border-radius: 0 !important; }
+  .spinner { border-radius: 50% !important; }
+  /* 目录式笔记的右侧箭头提示（后续 JS 注入也可） */
+  .md pre { border-radius: 0; }
+  .md code { border-radius: 0; }
+</style>
+</head>
+<body>
+  <!-- 顶栏 -->
+  <header class="topbar">
+    <div class="brand"><span class="logo"><svg viewBox="0 0 40 40"><path d="M9 4h16l9 9v23H9z" fill="#fff" stroke="#111" stroke-width="2"/><path d="M25 4l9 9h-9z" fill="#eef5f2" stroke="#111" stroke-width="2"/><line x1="12" y1="18" x2="27" y2="18" stroke="#0e7c66" stroke-width="2.4"/><line x1="12" y1="24" x2="22" y2="24" stroke="#111" stroke-width="2" opacity=".45"/><rect x="28" y="16.5" width="2.4" height="7" fill="#0e7c66"/></svg></span><span>笔记<b>管家</b></span></div>
+    <div class="top-actions">
+      <button class="ghost-btn" id="schedBtn" title="定时任务">⏱ 定时任务</button>
+      <button class="ghost-btn" id="memBtn" title="查看和修改我的偏好与长期记忆">偏好与记忆</button>
+      <span class="status"><span class="dot"></span>本地运行中</span>
+    </div>
+  </header>
+
+  <div class="main">
+    <!-- 左：笔记库（内容优先，V2 笔记前置） -->
+    <aside class="notes-col">
+      <div class="notes-head">
+        <div class="notes-title">笔记库 <span class="count" id="noteCount"></span></div>
+        <input id="searchInput" placeholder="搜索笔记内容…（多词空格分隔）" autocomplete="off">
+        <div class="filters" id="filters">
+          <select id="typeFilter"><option value="">全部类型</option></select>
+          <select id="statusFilter"><option value="">全部状态</option></select>
+          <span id="tagChips"></span>
+          <button id="clearFilter" style="display:none">清空</button>
+        </div>
+      </div>
+      <div class="notes-body">
+        <div id="searchResults" class="panel" style="display:none"></div>
+        <div id="notes" class="panel"></div>
+      </div>
+    </aside>
+
+    <!-- 右：对话工作台 -->
+    <section class="chat-col">
+      <div class="dropzone" id="dropzone">
+        拖入文件：<b>md</b> 进「已载入」待你下指令；<b>PDF / Word / Excel / 图片</b> 自动整理成笔记。也可从左侧<b>笔记库</b>拖入已有笔记
+      </div>
+      <input type="file" id="fileInput" accept=".md,.markdown,.txt,.text,.log,.pdf,.docx,.xlsx,text/markdown,text/plain" multiple hidden>
+      <div id="pendingBar" class="pending-bar" style="display:none"></div>
+      <div class="chat-card">
+        <div class="chat-toolbar"><span class="chat-label">对话</span><button id="clearChatBtn" class="ghost-btn" title="清空当前对话">清空</button></div>
+        <div id="messages"><div class="empty">问管家点什么，或把 PDF / Word / Excel 拖进来整理成完整笔记。</div></div>
+        <div class="inputrow">
+          <input id="chatInput" placeholder="输入问题，回车发送…" autocomplete="off">
+          <button id="sendBtn">发送</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- 笔记详情：右侧滑出大阅读面板 -->
+  <div class="modal drawer" id="modal">
+    <div class="modal-card">
+      <div class="modal-head"><span id="modalTitle"></span><button id="modalClose" title="关闭">×</button></div>
+      <div class="modal-open">
+        <button id="modalOpenBtn" hidden>在编辑器打开</button>
+        <button id="modalHistoryBtn" title="查看/回滚历史版本" hidden>历史版本</button>
+        <button id="modalExportBtn" title="导出为单文件 HTML（图片内嵌，适合分享）">导出 HTML</button>
+      </div>
+      <div id="modalBody"></div>
+      <div id="historyPanel" class="history-panel" hidden></div>
+      <div id="modalLinks" class="modal-links"></div>
+    </div>
+  </div>
+
+  <!-- 标签聚合视图 -->
+  <div class="modal" id="tagModal">
+    <div class="modal-card tagpage">
+      <div class="tagpage-head"><span id="tagModalTitle"></span>
+        <span id="tagModalCount" style="font-weight:400;color:var(--faint)"></span>
+        <span style="flex:1"></span>
+        <button id="tagModalClose" title="关闭" style="background:transparent;color:var(--muted);font-size:22px;line-height:1">×</button>
+      </div>
+      <div class="tagpage-list" id="tagModalList"></div>
+    </div>
+  </div>
+
+  <!-- 偏好与记忆管理 -->
+  <div class="modal" id="memoryModal">
+    <div class="modal-card memory">
+      <div class="modal-head"><span>偏好与记忆</span>
+        <span style="font-size:12px;font-weight:400;color:var(--faint)">管家会参考这些偏好为你服务，可随时增删改</span>
+        <button id="memoryModalClose" title="关闭" style="font-size:22px">×</button>
+      </div>
+      <div id="memList"></div>
+      <button id="addMemBtn">＋ 新增一条偏好 / 记忆</button>
+    </div>
+  </div>
+
+  <!-- 定时任务（简洁入口） -->
+  <div class="modal" id="schedModal">
+    <div class="modal-card">
+      <div class="modal-head"><span>定时任务</span><button id="schedModalClose" style="font-size:22px">×</button></div>
+      <div id="schedBody" class="panel" style="padding:16px 20px;"></div>
+    </div>
+  </div>
+
+<script src="/static/vendor/marked.min.js"></script>
+<script src="/static/vendor/mermaid.min.js?v=3"></script>
+<script>
+if (window.mermaid) { try { mermaid.initialize({ startOnLoad: false, securityLevel: "loose", theme: "default" }); } catch (e) {} }
+</script>
+<script>
+const $ = id => document.getElementById(id);
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+/* 禁用 marked 的 HTML 解析：<if>/<choose> 这类动态SQL标签会被当 HTML 标签吞掉，
+   统一用一个 renderer 按普通文本转义显示，抽屉与导出 HTML 共用 */
+let _mdTextRenderer = null;
+function mdTextRenderer() {
+  if (!_mdTextRenderer) {
+    const r = new marked.Renderer();
+    r.html = function (arg) {
+      const raw = (arg && arg.text != null) ? arg.text : (arg || "");
+      return String(raw).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    };
+    _mdTextRenderer = r;
+  }
+  return _mdTextRenderer;
+}
+
+function renderMd(text) {
+  let s = String(text).replace(/^\uFEFF/, "");
+  if (/^---\r?\n/.test(s)) {
+    const end = s.indexOf("\n---");       // 剥掉 YAML frontmatter，只渲染正文
+    if (end !== -1) s = s.slice(end + 4);
+  }
+  s = s.replace(/\[\[([^\[\]]+)\]\]/g, '<a href="#" class="wl" data-t="$1">$1</a>');
+  // md 里配图用相对路径 _assets/<笔记名>/xx → 重写成可由后端静态路由访问的 /_assets/…
+  s = s.replace(/!\[([^\]]*)\]\(_assets\/([^)\s]+)\)/g, '![$1](/_assets/$2)');
+  if (window.marked) {
+    try {
+      marked.setOptions({ renderer: mdTextRenderer() });
+      return marked.parse(s);
+    } catch (err) { /* 落到转义兜底 */ }
+  }
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/\n/g, "<br>");
+}
+
+/* 把容器里 marked 输出的 ```mermaid 代码块替换成渲染后的流程图。
+   在每个 innerHTML = renderMd(...) 之后调用。mermaid@9 用同步 render。 */
+function afterMd(el) {
+  if (!el || !window.mermaid) return;
+  const blocks = el.querySelectorAll("code.language-mermaid");
+  if (!blocks.length) return;
+  const nodes = [];
+  blocks.forEach(c => {
+    const pre = c.closest("pre");
+    const div = document.createElement("div");
+    div.className = "mermaid";
+    div.textContent = c.textContent;
+    if (pre && pre.parentNode) pre.parentNode.replaceChild(div, pre);
+    else c.replaceWith(div);
+    nodes.push(div);
+  });
+  try {
+    if (!window.__mermaidInit) {
+      window.__mermaidInit = true;
+      mermaid.initialize({ startOnLoad: false, securityLevel: "loose", theme: "default" });
+    }
+    let seq = 0;
+    nodes.forEach(div => {
+      const text = (div.textContent || "").trim();
+      if (!text) return;
+      const svg = mermaid.render("mmd" + (++seq) + "_" + Date.now(), text);
+      if (svg) div.innerHTML = svg;
+    });
+  } catch (err) { /* mermaid 渲染失败则保留原代码文本 */ }
+}
+
+function openNoteByTitle(title) {
+  const m = noteMeta.find(x => x.title === title);
+  const name = m ? m.name : (title.endsWith(".md") ? title : title + ".md");
+  fetch("/api/notes/" + encodeURIComponent(name)).then(r => r.json()).then(dd => {
+    if (dd.content && !String(dd.content).startsWith("Error")) showModal(name, dd.content, name);
+  }).catch(() => {});
+}
+// 双向链接点击 → 打开对应笔记
+document.addEventListener("click", e => {
+  const wl = e.target.closest("a.wl");
+  if (wl) { e.preventDefault(); openNoteByTitle(wl.getAttribute("data-t")); }
+});
+
+/* ---------- 对话 ---------- */
+let chatLog = [];                 // 对话历史（内存 + localStorage 持久化）
+function saveChat() {
+  try { localStorage.setItem("noteagent_chat", JSON.stringify(chatLog)); } catch (e) {}
+}
+function renderChatRecord(rec) {
+  const box = $("messages");
+  if (box.querySelector(".empty")) box.innerHTML = "";
+  if (rec.type === "note") {
+    box.appendChild(buildNoteCard(rec.name, rec.content || ""));
+  } else if (rec.role === "user") {
+    const e = el("div", "msg user"); e.textContent = rec.text; box.appendChild(e);
+  } else if (rec.role === "agent") {
+    const e = el("div", "msg agent md"); e.innerHTML = renderMd(rec.text); afterMd(e); box.appendChild(e);
+  } else if (rec.role === "err") {
+    const e = el("div", "msg err"); e.textContent = rec.text; box.appendChild(e);
+  }
+  box.scrollTop = box.scrollHeight;
+}
+function addMsg(role, text) {
+  chatLog.push({ role: role, text: text });
+  renderChatRecord({ role: role, text: text });
+  saveChat();
+}
+function loadChat() {
+  try {
+    const raw = localStorage.getItem("noteagent_chat");
+    if (!raw) return;
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr) || !arr.length) return;
+    chatLog = arr;
+    const box = $("messages");
+    if (box.querySelector(".empty")) box.innerHTML = "";
+    arr.forEach(renderChatRecord);
+    box.scrollTop = box.scrollHeight;
+  } catch (e) {}
+}
+function clearChat() {
+  chatLog = [];
+  try { localStorage.removeItem("noteagent_chat"); } catch (e) {}
+  $("messages").innerHTML = '<div class="empty">说点什么吧，比如「读一下 hello.md」或「把 notes/ 整理成索引」。<br>也可以把 PDF、Word、Excel 拖进来，我帮你整理成完整笔记。</div>';
+}
+
+function addLoading(text) {
+  const box = $("messages");
+  if (box.querySelector(".empty")) box.innerHTML = "";
+  const e = el("div", "msg agent loading");
+  e.appendChild(el("span", "spinner"));
+  e.appendChild(el("span", "load-msg", text || "管家正在思考…"));
+  box.appendChild(e);
+  box.scrollTop = box.scrollHeight;
+  return e;
+}
+function removeLoading() {
+  const e = $("messages").querySelector(".loading");
+  if (e) e.remove();
+}
+
+/* 生成笔记 → 直接渲染成品卡片，不把模型的"已写入xxx.md"废话暴露给用户。
+   摘要提取：去掉 Markdown 星号和「一句话结论」前缀，只给用户看干净的一句结论。 */
+function buildNoteCard(nm, content) {
+  const card = el("div", "note-product");
+  const head = el("div", "np-head");
+  head.appendChild(el("span", "np-title", nm.endsWith(".md") ? nm.replace(/\.md$/, "") : nm));
+  card.appendChild(head);
+  const body = String(content || "");
+  let summary = "";
+  const quote = body.match(/^>\s*(.+)$/m);
+  if (quote) {
+    summary = quote[1]
+      .replace(/^\*{0,2}一句话结论\*{0,2}\s*[：:]\s*/, "")
+      .replace(/\*\*/g, "")
+      .trim();
+  } else {
+    const first = body.split(/\n{2,}/).find(p => p.trim() && !/^[#`-]/.test(p.trim()));
+    if (first) summary = first.replace(/\n/g, " ").replace(/\*\*/g, "").trim();
+  }
+  if (summary) card.appendChild(el("div", "np-body", summary.slice(0, 140)));
+  const foot = el("div", "np-foot");
+  foot.appendChild(el("span", "np-hint", "已生成笔记 · 点击查看全文"));
+  const btn = el("button", "", "查看");
+  btn.onclick = e => { e.stopPropagation(); showModal(nm, content, nm); };
+  foot.appendChild(btn);
+  card.appendChild(foot);
+  card.onclick = () => showModal(nm, content, nm);
+  return card;
+}
+function renderNoteProduct(n) {
+  chatLog.push({ type: "note", name: n.name, content: n.content || "" });
+  renderChatRecord({ type: "note", name: n.name, content: n.content || "" });
+  saveChat();
+}
+
+async function send() {
+  if ($("sendBtn").disabled) return;          // 上一次还没回完，忽略连发
+  const input = $("chatInput");
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  let msg = text;
+  if (pendingFiles.length) {
+    const list = pendingFiles.map(f => "`" + f + "`").join("、");
+    msg = `请针对我载入的 Markdown 文件 ${list} 执行我的要求。先用 read_note 读取它们再处理。\n\n我的要求：${text}`;
+    pendingFiles = []; renderPending();
+  }
+  $("sendBtn").disabled = true;
+  addMsg("user", text);
+  addLoading("正在思考，可能需要一点时间…");
+  try {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 120000);
+    let r;
+    try {
+      r = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: msg }),
+        signal: ac.signal,
+      });
+    } finally { clearTimeout(timer); }
+    const data = await r.json();
+    removeLoading();
+    const notes = (data.notes || []).filter(n => n && n.name);
+    // 无论是否产出笔记，都展示模型的自然语言回复；有笔记时额外追加成品卡片
+    if (data.reply && String(data.reply).trim()) addMsg("agent", data.reply);
+    notes.forEach(renderNoteProduct);
+  } catch (e) {
+    removeLoading();
+    addMsg("err", (e && e.name === "AbortError") ? "管家处理超时（超过120秒），请稍后再试" : "出错：" + (e && e.message));
+  } finally {
+    $("sendBtn").disabled = false;
+    refresh();
+  }
+}
+$("sendBtn").onclick = send;
+$("chatInput").addEventListener("keydown", e => { if (e.key === "Enter") send(); });
+$("clearChatBtn").onclick = clearChat;
+loadChat();                          // 恢复上次会话历史
+
+/* ---------- 笔记：点击开弹层 / 拖拽读本地文件 / 按类型·标签筛选 ---------- */
+let noteMeta = [];                 // 全部笔记元数据
+let curType = "";                  // 当前类型筛选
+let curTag = "";                   // 当前标签筛选
+let curStatus = "";                // 当前状态筛选
+
+async function refreshNotes() {
+  try {
+    const r = await fetch("/api/notes/meta"); const d = await r.json();
+    noteMeta = (d.notes || []).filter(n => n && n.name);
+    buildFilters();
+    renderNoteList();
+    $("noteCount").textContent = noteMeta.length + " 篇";
+  } catch (e) {}
+}
+
+function buildFilters() {
+  const types = [...new Set(noteMeta.map(n => n.type).filter(Boolean))].sort();
+  const tags = [...new Set(noteMeta.flatMap(n => n.tags || []).filter(Boolean))].sort();
+  const statuses = [...new Set(noteMeta.map(n => n.status || "未标").filter(Boolean))].sort();
+  const sel = $("typeFilter");
+  sel.innerHTML = '<option value="">全部类型</option>' +
+    types.map(t => `<option value="${t}">${t}</option>`).join("");
+  sel.value = curType;
+  const st = $("statusFilter");
+  st.innerHTML = '<option value="">全部状态</option>' +
+    statuses.map(s => `<option value="${s}">${s}</option>`).join("");
+  st.value = curStatus;
+  const chips = $("tagChips"); chips.innerHTML = "";
+  tags.forEach(t => {
+    const c = el("span", "chip" + (t === curTag ? " on" : ""), t);
+    c.onclick = (e) => { e.stopPropagation(); openTagPage(t); };
+    chips.appendChild(c);
+  });
+  $("clearFilter").style.display = (curType || curTag || curStatus) ? "" : "none";
+}
+
+function visibleNotes() {
+  return noteMeta.filter(n =>
+    (!curType || n.type === curType) &&
+    (!curTag || (n.tags || []).includes(curTag)) &&
+    (!curStatus || (n.status || "未标") === curStatus));
+}
+
+function renderNoteList() {
+  const box = $("notes"); box.innerHTML = "";
+  const list = visibleNotes();
+  if (!list.length) { box.appendChild(el("div", "empty", "没有符合条件的笔记")); return; }
+  list.forEach(n => {
+    const item = el("div", "note-item");
+    item.draggable = true;
+    item.ondragstart = (e) => {
+      e.dataTransfer.setData("application/x-note-path", n.name);
+      e.dataTransfer.effectAllowed = "copy";
+    };
+    const head = el("div", "note-item-head");
+    head.appendChild(el("div", "note-title", n.title || n.name));
+    const delBtn = el("span", "del-note", "删除");
+    delBtn.onclick = (e) => {
+      e.stopPropagation();
+      showConfirm({
+        title: "删除笔记",
+        message: "删除「" + (n.title || n.name) + "」？\n删除前会自动存一份快照，可从「历史版本」回滚。",
+        danger: true,
+        onOk: async () => {
+          try {
+            const rr = await fetch("/api/delete-note", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: n.name }),
+            });
+            const dd = await rr.json();
+            if (dd.ok) { refreshNotes(); } else { alert(dd.error || "删除失败"); }
+          } catch (err) { alert("删除失败"); }
+        }
+      });
+    };
+    head.appendChild(delBtn);
+    item.appendChild(head);
+    const metaLine = el("div", "note-meta");
+    metaLine.appendChild(el("span", "badge type", n.type || "通用"));
+    const st = n.status || "未标";
+    metaLine.appendChild(el("span",
+      "badge " + (st === "完成" ? "st-done" : st === "初稿" ? "st-draft" : "st-none"), st));
+    if (n.date) metaLine.appendChild(el("span", "note-date", n.date));
+    (n.tags || []).slice(0, 3).forEach(t => metaLine.appendChild(el("span", "tg", "· " + t)));
+    item.appendChild(metaLine);
+    item.onclick = async () => {
+      const rr = await fetch("/api/notes/" + encodeURIComponent(n.name));
+      const dd = await rr.json();
+      showModal(n.name, dd.content, n.name);
+    };
+    box.appendChild(item);
+  });
+}
+
+$("typeFilter").addEventListener("change", e => {
+  curType = e.target.value; renderNoteList(); buildFilters();
+});
+$("statusFilter").addEventListener("change", e => {
+  curStatus = e.target.value; renderNoteList(); buildFilters();
+});
+$("clearFilter").addEventListener("click", () => {
+  curType = ""; curTag = ""; curStatus = ""; buildFilters(); renderNoteList();
+});
+
+/* ---------- 标签聚合视图（标签页） ---------- */
+function openTagPage(tag) {
+  const list = noteMeta.filter(n => (n.tags || []).includes(tag));
+  $("tagModalTitle").textContent = "# " + tag;
+  $("tagModalCount").textContent = list.length + " 篇";
+  const box = $("tagModalList"); box.innerHTML = "";
+  if (!list.length) { box.appendChild(el("div", "empty", "该标签下还没有笔记")); }
+  list.forEach(n => {
+    const item = el("div", "tagpage-item");
+    item.appendChild(el("div", "", n.title || n.name));
+    item.appendChild(el("div", "t-type",
+      [n.type || "通用"].concat((n.status && n.status !== "未标") ? n.status : []).join(" · ")));
+    item.onclick = async () => {
+      const rr = await fetch("/api/notes/" + encodeURIComponent(n.name));
+      const dd = await rr.json();
+      $("tagModal").classList.remove("show");
+      showModal(n.name, dd.content, n.name);
+    };
+    box.appendChild(item);
+  });
+  $("tagModal").classList.add("show");
+}
+$("tagModalClose").onclick = () => $("tagModal").classList.remove("show");
+$("tagModal").onclick = e => { if (e.target === $("tagModal")) $("tagModal").classList.remove("show"); };
+
+/* ---------- 笔记搜索 ---------- */
+let searchTimer = null;
+$("searchInput").addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(doSearch, 300);
+});
+async function doSearch() {
+  const q = $("searchInput").value.trim();
+  const box = $("searchResults"), notes = $("notes");
+  if (!q) { box.style.display = "none"; box.innerHTML = ""; notes.style.display = ""; return; }
+  notes.style.display = "none";
+  box.style.display = "";
+  box.innerHTML = "";
+  try {
+    const r = await fetch("/api/search?q=" + encodeURIComponent(q));
+    const d = await r.json();
+    if (!d.results || !d.results.length) {
+      box.appendChild(el("div", "empty", "没找到 — 可试试少用一个词，或换个说法"));
+      return;
+    }
+    d.results.forEach(h => {
+      const it = el("div", "hit");
+      it.appendChild(el("div", "ht", h.title || h.file));
+      const hs = el("div", "hs");
+      const parts = [];
+      if (h.lines_before && h.lines_before.length)
+        parts.push('<div class="hc">' + h.lines_before.join('<br>') + '</div>');
+      parts.push(h.snippet || '');
+      if (h.lines_after && h.lines_after.length)
+        parts.push('<div class="hc">' + h.lines_after.join('<br>') + '</div>');
+      hs.innerHTML = parts.join('<br>');
+      it.appendChild(hs);
+      it.appendChild(el("div", "hf", (h.file || "") + (h.line ? " : " + h.line : "")));
+      it.onclick = async () => {
+        const rr = await fetch("/api/notes/" + encodeURIComponent(h.file));
+        const dd = await rr.json();
+        showModal(h.file, dd.content, h.file);
+      };
+      box.appendChild(it);
+    });
+  } catch (e) {}
+}
+
+/* ---------- 笔记详情弹层 ---------- */
+let curName = "", curLocal = null;   // 当前弹层：文件名、本地内容（null=来自 notes/）
+
+function showConfirm(opts) {
+  opts = opts || {};
+  const ov = el("div", "cf");
+  const box = el("div", "cf-box");
+  box.appendChild(el("div", "cf-title", opts.title || "确认"));
+  const msg = el("div", "cf-msg");
+  (opts.message || "").split("\n").forEach((ln, i) => {
+    if (i > 0) msg.appendChild(document.createElement("br"));
+    msg.appendChild(document.createTextNode(ln));
+  });
+  box.appendChild(msg);
+  const btns = el("div", "cf-btns");
+  const cancel = el("button", "cf-btn", opts.cancelText || "取消");
+  cancel.type = "button";
+  const ok = el("button", "cf-btn " + (opts.danger ? "danger" : "primary"),
+                opts.okText || (opts.danger ? "删除" : "确认"));
+  ok.type = "button";
+  const close = () => ov.remove();
+  cancel.onclick = close;
+  ok.onclick = () => { close(); if (opts.onOk) opts.onOk(); };
+  btns.appendChild(cancel); btns.appendChild(ok);
+  box.appendChild(btns);
+  ov.appendChild(box);
+  ov.onclick = (e) => { if (e.target === ov) close(); };
+  document.body.appendChild(ov);
+}
+
+function showModal(title, content, openName, localContent) {
+  curName = title; curLocal = localContent;
+  $("modalTitle").textContent = title;
+  $("modalBody").innerHTML = renderMd(content);
+  $("modalBody").classList.add("md");
+  afterMd($("modalBody"));
+  $("modalLinks").innerHTML = "";
+  const openBtn = $("modalOpenBtn");
+  if (openName) {
+    openBtn.hidden = false;
+    openBtn.onclick = () => fetch("/api/notes/" + encodeURIComponent(openName) + "/open", { method: "POST" });
+  } else openBtn.hidden = true;
+  const expBtn = $("modalExportBtn");
+  if (openName) {
+    expBtn.hidden = false;
+    expBtn.onclick = () => exportHtml(openName);
+  } else expBtn.hidden = true;
+  const hisBtn = $("modalHistoryBtn");
+  $("historyPanel").hidden = true;
+  if (openName) {
+    hisBtn.hidden = false;
+    hisBtn.onclick = () => openHistory(openName);
+  } else hisBtn.hidden = true;
+  $("modal").classList.add("show");
+  if (openName) renderBacklinks(openName);
+}
+
+/* 历史版本面板：列快照，可查看 / 回滚 / 删除 */
+async function openHistory(name) {
+  const panel = $("historyPanel");
+  const r = await fetch("/api/history?file=" + encodeURIComponent(name));
+  const d = await r.json();
+  const items = d.items || [];
+  if (!items.length) {
+    panel.innerHTML = '<div class="empty">这篇笔记还没有历史版本</div>';
+  } else {
+    panel.innerHTML = '<div class="hist-head">历史版本（保留最近 20 份）</div>';
+    items.forEach(it => {
+      const row = el("div", "hist-row");
+      row.appendChild(el("span", "hist-ts", it.ts));
+      const v = el("button", "hist-act", "查看");
+      const rb = el("button", "hist-act", "回滚");
+      const del = el("button", "hist-act danger", "删除");
+      v.onclick = async () => {
+        const rr = await fetch("/api/history/content?file=" + encodeURIComponent(name) + "&snap=" + encodeURIComponent(it.snap));
+        const dd = await rr.json();
+        if (dd.ok) {
+          const prev = panel.querySelector(".hist-preview");
+          if (prev) prev.remove();
+          const box = el("div", "hist-preview");
+          box.innerHTML = "<b>快照 " + it.ts + "</b><br>" + renderMd(dd.content);
+          panel.appendChild(box);
+        }
+      };
+      rb.onclick = () => {
+        showConfirm({
+          title: "回滚快照",
+          message: "确认回滚到 " + it.ts + " ？当前内容会先存为一份快照。",
+          okText: "回滚",
+          onOk: async () => {
+            const rr = await fetch("/api/history/restore", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ file: name, snap: it.snap }) });
+            const dd = await rr.json();
+            addMsg(dd.ok ? "ok" : "err", dd.message);
+            if (dd.ok) {
+              openHistory(name);
+              const c = await fetch("/api/notes/" + encodeURIComponent(name));
+              const x = await c.json();
+              showModal(name, x.content, name);
+            }
+          }
+        });
+      };
+      del.onclick = () => {
+        showConfirm({
+          title: "删除快照",
+          message: "删除这份快照「" + it.ts + "」？此操作不可恢复。",
+          danger: true,
+          onOk: async () => {
+            await fetch("/api/history?file=" + encodeURIComponent(name) + "&snap=" + encodeURIComponent(it.snap), { method: "DELETE" });
+            openHistory(name);
+          }
+        });
+      };
+      row.append(v, rb, del);
+      panel.appendChild(row);
+    });
+  }
+  panel.hidden = false;
+}
+
+/* 导出为单文件 HTML：后端把 _assets 图片 base64 内嵌，前端用 marked 渲染成 HTML 下载 */
+async function exportHtml(name) {
+  try {
+    const r = await fetch("/api/notes/" + encodeURIComponent(name) + "/export-html");
+    const d = await r.json();
+    if (!d.ok) { addMsg("err", "导出失败：" + (d.error || "")); return; }
+    let body = String(d.md || "");
+    if (window.marked) { try { body = marked.parse(body, { renderer: mdTextRenderer() }); } catch (e) {} }
+    else body = body.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/\n/g, "<br>");
+    const title = (name || "笔记").replace(/\.md$/i, "");
+    const doc = `<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${title}</title>
+<style>
+body{max-width:820px;margin:0 auto;padding:32px 20px;font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.8;color:#1f2328}
+h1,h2,h3{line-height:1.4}table{border-collapse:collapse;width:100%;margin:12px 0}
+th,td{border:1px solid #d0d7de;padding:6px 10px;text-align:left}th{background:#f6f8fa}
+img{max-width:100%;height:auto;border:1px solid #d0d7de;border-radius:8px;margin:8px 0}
+pre{background:#f6f8fa;padding:12px;border-radius:8px;overflow:auto}
+code{font-family:Consolas,"Courier New",monospace}blockquote{border-left:4px solid #d0d7de;margin:12px 0;padding-left:12px;color:#57606a}
+hr{border:none;border-top:1px solid #d0d7de}</style></head><body>${body}</body></html>`;
+    const blob = new Blob([doc], { type: "text/html;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = title + ".html";
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(a.href);
+  } catch (e) { addMsg("err", "导出出错：" + e.message); }
+}
+
+async function renderBacklinks(name) {
+  const box = $("modalLinks"); if (!box) return;
+  try {
+    const r = await fetch("/api/links/" + encodeURIComponent(name));
+    const d = await r.json();
+    const out = d.out || [], back = d.back || [];
+    if (!out.length && !back.length) return;
+    if (out.length) {
+      box.appendChild(el("span", "links-title", "引用 →"));
+      out.forEach(t => { const a = el("a", "wl", t); a.setAttribute("data-t", t); a.href = "#"; box.appendChild(a); });
+    }
+    if (back.length) {
+      box.appendChild(el("span", "links-title", "被引用 ←"));
+      back.forEach(t => { const a = el("a", "wl", t); a.setAttribute("data-t", t); a.href = "#"; box.appendChild(a); });
+    }
+  } catch (e) {}
+}
+
+/* ---------- 分析卡片：把文件分析渲染成友好卡片，默认只看结论，细节折叠 ---------- */
+function acTable(items, cols, rowFn) {
+  const t = el("table");
+  t.innerHTML = "<thead><tr>" + cols.map(c => `<th>${c}</th>`).join("") + "</tr></thead>";
+  items.forEach(it => {
+    const tr = el("tr");
+    (rowFn(it) || []).forEach(v => tr.appendChild(el("td", "", v === undefined || v === null ? "" : String(v))));
+    t.appendChild(tr);
+  });
+  return t;
+}
+function acList(items, prefix) {
+  const ul = el("ul");
+  (items || []).forEach(x => ul.appendChild(el("li", "", (prefix || "") + x)));
+  return ul;
+}
+function acFold(title, content, open) {
+  const d = el("details"); if (open) d.open = true;
+  d.appendChild(el("summary", "", title));
+  const body = el("div", "d-body"); body.appendChild(content);
+  d.appendChild(body);
+  return d;
+}
+function renderAnalysisCard(a, name) {
+  const card = el("div", "analysis-card");
+  const head = el("div", "ac-head");
+  head.appendChild(el("span", "", "分析 · " + (name || "文件")));
+  card.appendChild(head);
+  const body = el("div", "ac-body");
+  if (a.summary) {
+    const s = el("div", "ac-summary");
+    s.appendChild(el("span", "lab", "一句话结论"));
+    s.appendChild(el("div", "txt", a.summary));
+    body.appendChild(s);
+  }
+  if (a.steps && a.steps.length)
+    body.appendChild(acFold("流程 / 步骤", acTable(a.steps, ["步骤", "做法"], s => [s.step, s.do])));
+  if (a.results && a.results.length)
+    body.appendChild(acFold("关键结果", acTable(a.results, ["指标", "结果", "备注"], r => [r.item, r.value, r.note]), true));
+  if (a.insights && a.insights.length)
+    body.appendChild(acFold("洞察", acList(a.insights)));
+  if (a.flags && a.flags.length)
+    body.appendChild(acFold("待核实 / 风险", acList(a.flags, "⚠️ ")));
+  card.appendChild(body);
+  const foot = el("div", "ac-foot");
+  const left = el("div", "ac-left");
+  if (name) {
+    const viewBtn = el("button", "", "查看原文");
+    viewBtn.onclick = e => {
+      e.stopPropagation();
+      fetch("/api/notes/" + encodeURIComponent(name)).then(r => r.json()).then(dd => {
+        if (dd.content && !String(dd.content).startsWith("Error")) showModal(name, dd.content, name);
+      });
+    };
+    left.appendChild(viewBtn);
+  }
+  foot.appendChild(left);
+  const saveBtn = el("button", "", "保存为笔记");
+  saveBtn.onclick = e => { e.stopPropagation(); saveAnalysis(name, a); };
+  foot.appendChild(saveBtn);
+  card.appendChild(foot);
+  return card;
+}
+async function saveAnalysis(name, a) {
+  const title = (name || "分析摘要").replace(/\.md$/, "").replace(/^.*[\\/]/, "");
+  addMsg("agent", "正在保存分析为笔记…");
+  try {
+    const r = await fetch("/api/save-analysis", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, analysis: a }),
+    });
+    const d = await r.json();
+    if (d.ok) { addMsg("agent", "已保存为笔记：`" + d.name + "`"); refresh(); }
+    else addMsg("err", "保存失败：" + (d.error || "未知"));
+  } catch (e) { addMsg("err", "保存失败：" + e.message); }
+}
+
+async function analyzeCurrent() {
+  $("modal").classList.remove("show");
+  addMsg("user", "分析这份文件：" + curName);
+  $("sendBtn").disabled = true;
+  addLoading("正在分析文件内容…");
+  try {
+    const r = await fetch("/api/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: curName, content: curLocal || "" }),
+    });
+    const d = await r.json();
+    removeLoading();
+    const hasAnalysis = d.analysis &&
+      (d.analysis.summary || (d.analysis.steps || []).length ||
+       (d.analysis.results || []).length || (d.analysis.insights || []).length);
+    if (hasAnalysis) {
+      $("messages").appendChild(renderAnalysisCard(d.analysis, d.saved || d.name || curName));
+      $("messages").scrollTop = $("messages").scrollHeight;
+    } else {
+      addMsg("agent", d.reply);
+    }
+  } catch (e) {
+    removeLoading();
+    addMsg("err", "出错：" + e.message);
+  } finally {
+    $("sendBtn").disabled = false;
+    refresh();
+  }
+}
+$("modalClose").onclick = () => $("modal").classList.remove("show");
+$("modal").onclick = e => { if (e.target === $("modal")) $("modal").classList.remove("show"); };
+
+/* ---------- 拖拽 / 选择文件：md 进「已载入」待下指令；其他格式自动分析成笔记 ---------- */
+let pendingFiles = [];              // 已载入的 md 文件（notes/载入/ 下，待用户在输入框下指令）
+
+function isMd(name) { return /\.(md|markdown)$/i.test(name); }
+
+function renderPending() {
+  const bar = $("pendingBar");
+  if (!pendingFiles.length) { bar.style.display = "none"; bar.innerHTML = ""; return; }
+  bar.style.display = ""; bar.innerHTML = "";
+  bar.appendChild(el("span", "p-label", "已载入："));
+  pendingFiles.forEach(f => {
+    const c = el("span", "p-chip", f.replace(/^载入\//, ""));
+    const x = el("span", "p-x", "×");
+    x.onclick = () => { pendingFiles = pendingFiles.filter(y => y !== f); renderPending(); };
+    c.appendChild(x); bar.appendChild(c);
+  });
+  bar.appendChild(el("span", "p-hint", "在输入框告诉管家要对它们做什么（摘要 / 合并 / 提炼要点…）"));
+}
+
+function readFileText(file) {
+  return new Promise(res => { const rd = new FileReader(); rd.onload = () => res(rd.result); rd.readAsText(file); });
+}
+
+async function importMdFiles(mdFiles) {
+  const batch = [];
+  for (const f of mdFiles) {
+    const text = await readFileText(f);
+    if (text) batch.push({ name: f.name, content: text });
+  }
+  if (!batch.length) return;
+  try {
+    const r = await fetch("/api/import", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ files: batch }),
+    });
+    const d = await r.json();
+    (d.saved || []).forEach(s => pendingFiles.push(s));
+    renderPending();
+    refreshNotes();
+  } catch (e) { addMsg("err", "载入失败：" + e.message); }
+}
+
+function routeFiles(files) {
+  const mds = [], others = [];
+  (files || []).forEach(f => isMd(f.name) ? mds.push(f) : others.push(f));
+  others.forEach(f => analyzeUpload(f));       // 非 md → 自动分析生成笔记
+  if (mds.length) importMdFiles(mds);           // md → 进「已载入」待下指令
+}
+
+const dz = $("dropzone"), fi = $("fileInput");
+dz.onclick = () => fi.click();
+fi.onchange = () => { routeFiles(Array.from(fi.files || [])); fi.value = ""; };
+dz.ondragover = e => { e.preventDefault(); dz.classList.add("over"); };
+dz.ondragleave = () => dz.classList.remove("over");
+dz.ondrop = e => {
+  e.preventDefault(); dz.classList.remove("over");
+  // 从笔记库拖来的笔记 → 加入「已载入」，用户在输入框下指令（多文档总结 / 单文档优化等）
+  const noteRel = (e.dataTransfer.getData("application/x-note-path") || "").trim();
+  if (noteRel && noteMeta.some(n => n.name === noteRel)) {
+    if (!pendingFiles.includes(noteRel)) {
+      pendingFiles.push(noteRel);
+      renderPending();
+      addMsg("user", "载入笔记：" + noteRel.replace(/^载入\//, ""));
+    }
+    return;
+  }
+  routeFiles(Array.from(e.dataTransfer.files || []));
+};
+
+async function analyzeLocal(name, content) {
+  addMsg("user", "分析文件：" + name);
+  $("sendBtn").disabled = true;
+  addLoading("正在分析文件内容…");
+  try {
+    const r = await fetch("/api/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, content }),
+    });
+    const d = await r.json();
+    removeLoading();
+    const hasAnalysis = d.analysis &&
+      (d.analysis.summary || (d.analysis.steps || []).length ||
+       (d.analysis.results || []).length || (d.analysis.insights || []).length);
+    if (hasAnalysis) {
+      $("messages").appendChild(renderAnalysisCard(d.analysis, d.name || name));
+      $("messages").scrollTop = $("messages").scrollHeight;
+    } else {
+      addMsg("agent", d.reply);
+    }
+  } catch (e) {
+    removeLoading();
+    addMsg("err", "出错：" + e.message);
+  } finally {
+    $("sendBtn").disabled = false;
+    refresh();
+  }
+}
+
+async function analyzeUpload(file) {
+  addMsg("user", "生成笔记：" + file.name);
+  $("sendBtn").disabled = true;
+  addLoading("正在提取内容并整理成完整笔记…");
+  try {
+    const fd = new FormData();
+    fd.append("file", file);
+    const r = await fetch("/api/analyze-file", { method: "POST", body: fd });
+    const d = await r.json();
+    removeLoading();
+    const notesArr = (d.notes && d.notes.length) ? d.notes : [];
+    const hasAnalysis = d.analysis &&
+      (d.analysis.summary || (d.analysis.steps || []).length ||
+       (d.analysis.results || []).length || (d.analysis.insights || []).length);
+    if (notesArr.length) {
+      // 生成完整笔记：先展示管家一句话回复，再追加成品卡片
+      if (d.reply && String(d.reply).trim()) addMsg("agent", d.reply);
+      notesArr.forEach(n => renderNoteProduct(n));
+      $("messages").scrollTop = $("messages").scrollHeight;
+    } else if (hasAnalysis) {
+      if (d.reply && String(d.reply).trim()) addMsg("agent", d.reply);
+      $("messages").appendChild(renderAnalysisCard(d.analysis, d.saved || d.name || file.name));
+      $("messages").scrollTop = $("messages").scrollHeight;
+    } else {
+      addMsg("agent", d.reply);
+    }
+  } catch (e) {
+    removeLoading();
+  } finally {
+    $("sendBtn").disabled = false;
+    refresh();
+  }
+}
+
+/* ---------- 偏好与记忆管理（可增删改） ---------- */
+async function loadMemories() {
+  const box = $("memList"); box.innerHTML = "";
+  try {
+    const r = await fetch("/api/memories");
+    const d = await r.json();
+    const items = d.items || [];
+    if (!items.length) {
+      box.appendChild(el("div", "empty", "还没有长期记忆。\n告诉管家你的偏好（比如「用要点式写笔记」），它会记住，也可在这里手动添加。"));
+      return;
+    }
+    items.forEach(m => {
+      const card = el("div", "mem-card");
+      const name = el("div", "mem-name", m.name || "未命名");
+      card.appendChild(name);
+      card.appendChild(el("div", "mem-body", m.content || "（空）"));
+      const acts = el("div", "mem-actions");
+      const edit = el("button", "", "编辑");
+      edit.onclick = () => renderMemEditor(card, m);
+      const del = el("button", "del", "删除");
+      del.onclick = () => {
+        showConfirm({
+          title: "删除记忆",
+          message: "删除这条记忆「" + (m.name || "") + "」？",
+          danger: true,
+          onOk: async () => {
+            await fetch("/api/memories/" + encodeURIComponent(m.name), { method: "DELETE" });
+            loadMemories();
+          }
+        });
+      };
+      acts.appendChild(edit); acts.appendChild(del);
+      card.appendChild(acts);
+      box.appendChild(card);
+    });
+  } catch (e) {}
+}
+
+function renderMemEditor(card, m) {
+  // 收起其它编辑器
+  document.querySelectorAll("#memList .mem-edit").forEach(x => x.remove());
+  const ed = el("div", "mem-edit");
+  const ni = el("input"); ni.placeholder = "记忆名称（如：回复风格）"; ni.value = m ? m.name : "";
+  const ta = el("textarea"); ta.placeholder = "内容（一句话或几点均可）…"; ta.value = m ? m.content : "";
+  const row = el("div", "row");
+  const save = el("button", "save", "保存");
+  save.onclick = async () => {
+    const nm = ni.value.trim(), ct = ta.value.trim();
+    if (!nm || !ct) { alert("名称和内容都不能为空"); return; }
+    const r = await fetch("/api/memories", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: nm, content: ct }),
+    });
+    const d = await r.json();
+    if (d.ok) loadMemories();
+    else alert("保存失败：" + (d.error || ""));
+  };
+  const cancel = el("button", "cancel", "取消");
+  cancel.onclick = () => loadMemories();
+  row.appendChild(save); row.appendChild(cancel);
+  ed.appendChild(ni); ed.appendChild(ta); ed.appendChild(row);
+  if (card) card.appendChild(ed); else document.getElementById("memList").appendChild(ed);
+  ni.focus();
+}
+
+$("memBtn").onclick = () => { $("memoryModal").classList.add("show"); loadMemories(); };
+$("memoryModalClose").onclick = () => $("memoryModal").classList.remove("show");
+$("memoryModal").onclick = e => { if (e.target === $("memoryModal")) $("memoryModal").classList.remove("show"); };
+$("addMemBtn").onclick = () => { renderMemEditor(null, null); };
+
+/* ---------- 定时任务（简洁展示） ---------- */
+async function loadSchedules() {
+  const box = $("schedBody");
+  try {
+    const [sr, lr] = await Promise.all([
+      fetch("/api/schedules"), fetch("/api/tasks-log")
+    ]);
+    const s = await sr.json(), l = await lr.json();
+    renderSchedules(s.items || [], l.items || []);
+  } catch (e) { box.innerHTML = ""; box.appendChild(el("div", "", "加载失败")); }
+}
+function fmtNext(it) {
+  const at = it.next_at * 1000;
+  if (it.kind === "once") {
+    const d = new Date(at), n = new Date();
+    const hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    const dd = `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const today = new Date(n.getFullYear(), n.getMonth(), n.getDate());
+    const target = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const diff = Math.round((target - today) / 86400000);
+    if (diff === 0) return `今天 ${hm}`;
+    if (diff === 1) return `明天 ${hm}`;
+    return `${dd} ${hm}`;
+  }
+  if (it.every === 86400) {
+    const d = new Date(at);
+    return `每晚 ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  }
+  if (it.every >= 3600) return `每 ${Math.round(it.every / 3600)} 小时`;
+  return `每 ${it.every} 秒`;
+}
+function buildSchedAdd() {
+  const add = el("div", "sched-add");
+  const input = el("input"); input.placeholder = "如：19:50 做今日总结"; input.id = "schedInput";
+  const btn = el("button", "", "添加");
+  btn.onclick = async () => {
+    const raw = (input.value || "").trim(); if (!raw) return;
+    const m = raw.match(/^(\d{1,2}:\d{2}(?::\d{2})?)\s*/);
+    const when = m ? m[1] : "";
+    const prompt = m ? raw.slice(m[0].length).trim() : raw;
+    if (!when) { alert("请在开头写明时刻，如：19:50 做今日总结"); return; }
+    if (!prompt) { alert("请写清任务内容"); return; }
+    try {
+      await fetch("/api/schedules", { method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ when, prompt }) });
+    } catch (e) {}
+    input.value = ""; loadSchedules();
+  };
+  add.append(input, btn);
+  return add;
+}
+function fmtRunAt(ts) {
+  if (!ts) return "";
+  const d = new Date(ts * 1000);
+  return `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+function renderSchedules(items, logs) {
+  const box = $("schedBody"); box.innerHTML = "";
+  if (!items || !items.length) {
+    box.appendChild(el("div", "sched-empty", "还没有定时任务 — 在下方输入时刻和内容，到点管家会自动执行"));
+    box.appendChild(buildSchedAdd());
+    return;
+  }
+  const bySid = {};
+  (logs || []).forEach(r => {
+    if (!r.sid) return;
+    if (!bySid[r.sid]) bySid[r.sid] = r;   // 记录已按最新在前，取最近一条
+  });
+  const grid = el("div", "sched-grid");
+  items.forEach(it => {
+    const card = el("div", "sched-card");
+    const top = el("div", "sched-top");
+    const tag = el("span", it.kind === "once" ? "sched-tag once" : "sched-tag repeat",
+                   it.kind === "once" ? "执行一次" : "重复");
+    const ttl = el("span", "sched-ttl", it.title);
+    const del = el("span", "sched-del", "删除");
+    del.onclick = () => {
+      showConfirm({
+        title: "删除定时任务",
+        message: "删除定时任务「" + (it.title || "") + "」？之后不再自动执行。",
+        danger: true,
+        onOk: async () => {
+          try { await fetch("/api/schedules/" + encodeURIComponent(it.sid), { method: "DELETE" }); } catch (e) {}
+          loadSchedules();
+        }
+      });
+    };
+    top.append(tag, ttl, del);
+    const when = el("div", "sched-when", fmtNext(it));
+    const desc = el("div", "sched-desc", it.prompt);
+    card.append(top, when, desc);
+    const rec = bySid[it.sid];
+    if (rec) {
+      const run = el("div", "sched-run");
+      const at = fmtRunAt(rec.trigger_at);
+      if (rec.status === "done") {
+        run.className = "sched-run ok";
+        run.textContent = "上次执行成功 · " + at + " · " + (rec.result || "已产出");
+      } else if (rec.status === "failed") {
+        run.className = "sched-run err";
+        run.textContent = "上次执行失败 · " + at + " · " + (rec.error || "未知错误");
+        const rr = el("span", "sched-rerun", "重跑");
+        rr.onclick = async () => {
+          try { await fetch("/api/tasks/" + encodeURIComponent(rec.tid) + "/rerun", { method: "POST" }); } catch (e) {}
+          loadSchedules();
+        };
+        run.appendChild(rr);
+      } else {
+        run.className = "sched-run running";
+        run.textContent = "执行中 · " + at + " · 请稍候…";
+      }
+      card.appendChild(run);
+    }
+    grid.appendChild(card);
+  });
+  box.appendChild(grid);
+  box.appendChild(buildSchedAdd());
+}
+$("schedBtn").onclick = () => { $("schedModal").classList.add("show"); loadSchedules(); };
+$("schedModalClose").onclick = () => $("schedModal").classList.remove("show");
+$("schedModal").onclick = e => { if (e.target === $("schedModal")) $("schedModal").classList.remove("show"); };
+
+/* ---------- 刷新：只刷新笔记库与计数（计划板/后台任务等运维面板不再展示给用户） ---------- */
+function refresh() { refreshNotes(); }
+refresh();
+// ---- 浏览器定位：页面加载自动定位一次（首次需授权，之后同域自动复用），存经纬度供 fetch_weather 未指定城市时按当前位置查询 ----
+function locateMe() {
+  if (!navigator.geolocation) return;
+  try {
+    navigator.geolocation.getCurrentPosition(function(p) {
+      fetch("/api/location", {method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({lat: p.coords.latitude, lon: p.coords.longitude, city: ""})}).catch(function(){});
+    }, function(){}, {enableHighAccuracy: true, timeout: 8000, maximumAge: 600000});
+  } catch(e) {}
+}
+locateMe();
+setInterval(refresh, 4000);
+</script>
+</body>
+</html>
