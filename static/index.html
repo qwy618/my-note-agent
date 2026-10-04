@@ -897,7 +897,7 @@ function showModal(title, content, openName, localContent) {
   const openBtn = $("modalOpenBtn");
   if (openName) {
     openBtn.hidden = false;
-    openBtn.onclick = () => fetch("/api/notes/" + encodeURIComponent(openName) + "/open", { method: "POST" });
+    openBtn.onclick = () => fetch("/api/note/open", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: openName }) });
   } else openBtn.hidden = true;
   const expBtn = $("modalExportBtn");
   if (openName) {
@@ -980,7 +980,7 @@ async function openHistory(name) {
 /* 导出为单文件 HTML：后端把 _assets 图片 base64 内嵌，前端用 marked 渲染成 HTML 下载 */
 async function exportHtml(name) {
   try {
-    const r = await fetch("/api/notes/" + encodeURIComponent(name) + "/export-html");
+    const r = await fetch("/api/note/export?name=" + encodeURIComponent(name));
     const d = await r.json();
     if (!d.ok) { addMsg("err", "导出失败：" + (d.error || "")); return; }
     let body = String(d.md || "");
@@ -1010,7 +1010,7 @@ hr{border:none;border-top:1px solid #d0d7de}</style></head><body>${body}</body><
 async function renderBacklinks(name) {
   const box = $("modalLinks"); if (!box) return;
   try {
-    const r = await fetch("/api/links/" + encodeURIComponent(name));
+    const r = await fetch("/api/note/links?name=" + encodeURIComponent(name));
     const d = await r.json();
     const out = d.out || [], back = d.back || [];
     if (!out.length && !back.length) return;

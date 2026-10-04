@@ -376,9 +376,6 @@ def notes_meta():
     return {"notes": agent.list_note_meta()}
 
 
-@app.get("/api/notes/{name}")
-def read_note(name: str):
-    return {"name": name, "content": agent.read_note(name)}
 
 
 @app.get("/api/links/{name}")
@@ -397,8 +394,7 @@ def open_note(name: str):
     return {"ok": True}
 
 
-@app.get("/api/notes/{name}/export-html")
-def export_note_html(name: str):
+def _export_note_md(name: str):
     """导出单文件 HTML 用：返回 md，其中 _assets 图片替换成 data:URI base64 内嵌。
     前端拿这份 md 用 marked 渲染成 HTML 下载——单文件、不依赖 assets 图片目录，适合分享。"""
     md = agent.read_note(name)
@@ -425,6 +421,43 @@ def export_note_html(name: str):
 
     body = _re.sub(r"_assets/([^)\s]+)", _embed, md)
     return {"ok": True, "name": name, "md": body}
+
+
+@app.get("/api/notes/{name}/export-html")
+def export_note_html(name: str):
+    return _export_note_md(name)
+
+
+# ---- 子目录/带斜杠路径笔记名的兼容接口 ----
+# FastAPI 的 {name} 路径参数不匹配含 "/" 的路径，带路径笔记名（如 载入/AGENTS.zh.md）
+# 走 {name:path} 或查询参数，避免 404。
+
+@app.get("/api/notes/{name:path}")
+def read_note_path(name: str):
+    """读取笔记内容；支持子目录/带斜杠路径的笔记名。"""
+    return {"name": name, "content": agent.read_note(name)}
+
+
+@app.post("/api/note/open")
+def open_note_query(req: dict):
+    """在系统默认程序打开笔记（兼容子目录路径，name 走 body）。"""
+    path = agent.note_path(str(req.get("name") or ""))
+    if path is None or not path.is_file():
+        return {"ok": False, "error": "文件不存在"}
+    os.startfile(path)
+    return {"ok": True}
+
+
+@app.get("/api/note/export")
+def export_note_query(name: str = ""):
+    """导出（兼容子目录路径，name 走查询参数）。"""
+    return _export_note_md(name)
+
+
+@app.get("/api/note/links")
+def links_query(name: str = ""):
+    """双向链接（兼容子目录路径，name 走查询参数）。"""
+    return agent.note_links(name)
 
 
 @app.get("/api/todo")
