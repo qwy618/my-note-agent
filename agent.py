@@ -289,11 +289,21 @@ def delete_snapshot(rel: str, snap: str) -> str:
         return f"Error: 删除失败 {e}"
 
 
+# 内部目录：不当作笔记列表/元数据显示
+_EXCLUDE_DIRS = {".history", "_assets"}
+
+
+def _is_internal(rel) -> bool:
+    """相对 notes/ 的路径，首段若是内部目录（快照/配图）则跳过。"""
+    return rel.parts and rel.parts[0] in _EXCLUDE_DIRS
+
+
 def list_notes() -> str:
     files = sorted(
-        p.name
-        for p in NOTES.glob("*")
+        p.relative_to(NOTES).as_posix()
+        for p in NOTES.rglob("*")
         if p.is_file() and p.suffix.lower() in TEXT_EXTS
+        and not _is_internal(p.relative_to(NOTES))
     )
     return "\n".join(files) if files else "(notes/ 里还没有文本笔记)"
 
@@ -301,8 +311,11 @@ def list_note_meta() -> list[dict]:
     """读取每篇笔记 frontmatter，返回结构化元数据（供仪表盘筛选），并按日期倒序（最近的在前）。"""
     from datetime import datetime
     items = []
-    for p in sorted(NOTES.glob("*")):
+    for p in sorted(NOTES.rglob("*")):
+        rel = p.relative_to(NOTES).as_posix()
         if not p.is_file() or p.suffix.lower() not in TEXT_EXTS:
+            continue
+        if _is_internal(p.relative_to(NOTES)):
             continue
         meta = {}
         try:
@@ -331,7 +344,7 @@ def list_note_meta() -> list[dict]:
             mt = ""
         date = max(fm_date, mt) if (fm_date and mt) else (fm_date or mt)
         items.append({
-            "name": p.name,
+            "name": rel,
             "title": str(meta.get("标题") or meta.get("title") or p.stem),
             "type": str(meta.get("类型") or meta.get("type") or "通用"),
             "tags": [str(t) for t in tags],
