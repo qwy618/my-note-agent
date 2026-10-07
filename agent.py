@@ -2192,10 +2192,97 @@ TOOLS = [{
             "properties": {"city": {"type": "string", "description": "可选，城市名，如 西安/北京/乌鲁木齐"}},
             "required": [],
         },
+    }, {
+        "name": "tavily_search",
+        "description": "实时联网搜索网页（Tavily）：查最新资料、新闻、技术文档等，返回标题+链接+摘要。需要补充最新信息、核实外部资料时用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "搜索关键词"},
+                "max_results": {"type": "integer", "description": "返回条数，默认 5"},
+            },
+            "required": ["query"],
+        },
+    }, {
+        "name": "feishu_create_doc",
+        "description": "把 Markdown 内容通过飞书官方 MCP 导入成一篇飞书云文档并返回链接。用户要求'推到飞书/建飞书文档/同步到飞书'时用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "文档标题，≤27字"},
+                "content": {"type": "string", "description": "Markdown 内容"},
+            },
+            "required": ["title", "content"],
+        },
     }
     ]
 
-TOOL_HANDLERS = { "fetch_url": fetch_url,
+
+def tavily_search(query: str, max_results: int = 5) -> str:
+    """Tavily 实时联网搜索。直接调官方 HTTP API（tavily-mcp 底层就是这个接口）。"""
+    key = os.getenv("TAVILY_API_KEY")
+    if not key:
+        return ("未配置 TAVILY_API_KEY。请到 https://app.tavily.com 免费注册获取，"
+                "然后在项目根 .env 加一行：TAVILY_API_KEY=你的key")
+    import urllib.request as _u
+    payload = json.dumps({"api_key": key, "query": query,
+                          "max_results": max_results, "search_depth": "advanced"}).encode("utf-8")
+    req = _u.Request("https://api.tavily.com/search", data=payload,
+                     headers={"Content-Type": "application/json"})
+    try:
+        with _u.urlopen(req, timeout=20) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        return f"Tavily 请求失败: {e}"
+    results = data.get("results", [])
+    if not results:
+        return "Tavily 无结果" + (f"：{data.get('message','')}" if data.get("message") else "")
+    lines = []
+    for res in results[:max_results]:
+        lines.append(f"- **{res.get('title','')}**\n  {res.get('url','')}\n  {res.get('content','')[:400]}")
+    return "\n\n".join(lines)
+
+
+def feishu_create_doc(title: str, content: str) -> str:
+    """把 Markdown 通过飞书官方 MCP(docx_builtin_import)导入成飞书云文档，返回链接。"""
+    app_id = os.getenv("APP_ID")
+    app_secret = os.getenv("APP_SECRET")
+    if not app_id or not app_secret:
+        return "未配置飞书 APP_ID/APP_SECRET（.env）。"
+    if not content:
+        return "内容为空，无法建文档。"
+    import asyncio
+
+    async def _imp(markdown, file_name):
+        from mcp import ClientSession, StdioServerParameters
+        from mcp.client.stdio import stdio_client
+        params = StdioServerParameters(
+            command="npx",
+            args=["-y", "@larksuiteoapi/lark-mcp", "mcp", "-a", app_id, "-s", app_secret],
+            env={"npm_config_registry": "https://registry.npmmirror.com", **os.environ},
+        )
+        async with stdio_client(params) as (read, write), ClientSession(read, write) as s:
+            await s.initialize()
+            return await s.call_tool("docx_builtin_import", {
+                "data": {"markdown": markdown, "file_name": file_name},
+                "useUAT": False,
+            })
+
+    try:
+        res = asyncio.run(_imp(content, title[:27]))
+        text = "\n".join(getattr(c, "text", str(c)) for c in res.content)
+        try:
+            url = json.loads(text).get("result", {}).get("url", text)
+            return f"已导入飞书云文档：{url}"
+        except Exception:
+            return text
+    except Exception as e:
+        return f"飞书创建文档失败: {e}"
+
+
+TOOL_HANDLERS = { "feishu_create_doc": feishu_create_doc,
+    "tavily_search": tavily_search,
+    "fetch_url": fetch_url,
     "fetch_hot": fetch_hot,
     "hot_notes": hot_notes,
     "fetch_weather": fetch_weather,
